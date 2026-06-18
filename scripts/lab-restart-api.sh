@@ -14,8 +14,12 @@ if [[ -z "${RMM_HEADSCALE_API_KEY:-}" ]]; then
   echo "RMM_HEADSCALE_API_KEY is missing in .env. Run: make lab-headscale-key" >&2
   exit 1
 fi
+if [[ -z "${RMM_BOOTSTRAP_TOKEN:-}" ]]; then
+  echo "RMM_BOOTSTRAP_TOKEN is missing in .env. Run: make lab-bootstrap-token" >&2
+  exit 1
+fi
 
 podman compose up -d --force-recreate rmm-api
 
 echo "rmm-api restarted with Headscale API access"
-echo "Next: make lab-enroll-script LOGIN_SERVER=http://<this-pc-ip>:8081"
+echo "Next: make lab-bootstrap-command CONTROL_PLANE_URL=http://<this-pc-ip>:8080"

@@ -47,22 +47,23 @@ Prepare API access for `rmm-api`:
 
 ```bash
 make lab-headscale-key
+make lab-bootstrap-token
 make lab-restart-api
 ```
 
 ## Enroll One Test Node
 
-The next real milestone is enrolling one disposable endpoint. Use a Linux VM, spare laptop, or test host. Do not enroll your main workstation unless you intentionally want to change its Tailscale state.
+The next real milestone is enrolling one disposable endpoint. Use a spare laptop, test host, or VM. Do not enroll your main workstation unless you intentionally want to change its Tailscale state.
 
-Generate the enrollment script:
+Generate the one-line bootstrap command:
 
 ```bash
-make lab-enroll-script LOGIN_SERVER=http://<this-pc-ip>:8081
+make lab-bootstrap-command CONTROL_PLANE_URL=http://<this-pc-ip>:8080
 ```
 
-Run the generated script on the disposable Linux endpoint.
+Run the printed `curl -fsSL ... | sudo bash` command on the disposable Linux endpoint. That endpoint does not need Git, Go, Podman, or this repository.
 
-Or write the script to a file:
+If you prefer a file instead of `curl | sudo bash`, write the script locally:
 
 ```bash
 make lab-write-enroll-script LOGIN_SERVER=http://<this-pc-ip>:8081

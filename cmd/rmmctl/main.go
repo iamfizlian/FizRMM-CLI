@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"fizrmm-cli/internal/enrollment"
 	"fizrmm-cli/internal/version"
 )
 
@@ -358,9 +359,9 @@ func generateEnrollScript(apiURL string, args []string, jsonOutput bool) error {
 		return err
 	}
 
-	script := linuxEnrollScript(*loginServer, key.Key, *hostname)
+	script := enrollment.LinuxScript(*loginServer, key.Key, *hostname)
 	if normalizedOS == "windows" {
-		script = windowsEnrollScript(*loginServer, key.Key, *hostname)
+		script = enrollment.WindowsScript(*loginServer, key.Key, *hostname)
 	}
 
 	if jsonOutput {
@@ -438,54 +439,6 @@ func apiRequest(apiURL string, method string, path string, requestBody any) ([]b
 	}
 
 	return response, nil
-}
-
-func linuxEnrollScript(loginServer string, authKey string, hostname string) string {
-	hostnameLine := `HOSTNAME="$(hostname -f 2>/dev/null || hostname)"`
-	if strings.TrimSpace(hostname) != "" {
-		hostnameLine = fmt.Sprintf("HOSTNAME=%q", hostname)
-	}
-
-	return fmt.Sprintf(`#!/usr/bin/env bash
-set -euo pipefail
-
-LOGIN_SERVER=%q
-AUTH_KEY=%q
-%s
-
-if ! command -v tailscale >/dev/null 2>&1; then
-  curl -fsSL https://tailscale.com/install.sh | sh
-fi
-
-if command -v systemctl >/dev/null 2>&1; then
-  sudo systemctl enable --now tailscaled
-fi
-
-sudo tailscale up \
-  --login-server "${LOGIN_SERVER}" \
-  --authkey "${AUTH_KEY}" \
-  --hostname "${HOSTNAME}" \
-  --ssh=false
-
-tailscale status
-`, loginServer, authKey, hostnameLine)
-}
-
-func windowsEnrollScript(loginServer string, authKey string, hostname string) string {
-	hostnameLine := `$Hostname = $env:COMPUTERNAME`
-	if strings.TrimSpace(hostname) != "" {
-		hostnameLine = fmt.Sprintf("$Hostname = %q", hostname)
-	}
-
-	return fmt.Sprintf(`$ErrorActionPreference = "Stop"
-
-$LoginServer = %q
-$AuthKey = %q
-%s
-
-tailscale up --login-server $LoginServer --authkey $AuthKey --hostname $Hostname
-tailscale status
-`, loginServer, authKey, hostnameLine)
 }
 
 func stringOrDash(value *string) string {

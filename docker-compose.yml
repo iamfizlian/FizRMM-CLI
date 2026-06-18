@@ -63,10 +63,12 @@ services:
     environment:
       RMM_API_ADDR: ":8080"
       RMM_AUTO_MIGRATE: "true"
+      RMM_BOOTSTRAP_TOKEN: "${RMM_BOOTSTRAP_TOKEN:-}"
       RMM_DATABASE_URL: "postgres://fizrmm:fizrmm-lab-password@postgres:5432/fizrmm?sslmode=disable"
       RMM_HEADSCALE_API_KEY: "${RMM_HEADSCALE_API_KEY:-}"
       RMM_HEADSCALE_URL: "http://headscale:8080"
       RMM_MIGRATIONS_DIR: "/migrations"
+      RMM_PUBLIC_BASE_URL: "${RMM_PUBLIC_BASE_URL:-http://localhost:8080}"
     depends_on:
       postgres:
         condition: service_healthy

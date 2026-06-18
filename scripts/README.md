@@ -7,11 +7,12 @@ Run from the repository root.
 ```bash
 make compose-up
 make lab-headscale-key
+make lab-bootstrap-token
 make lab-restart-api
-make lab-enroll-script LOGIN_SERVER=http://<this-pc-ip>:8081
+make lab-bootstrap-command CONTROL_PLANE_URL=http://<this-pc-ip>:8080
 ```
 
-Run the generated enrollment script on a disposable Linux VM or test machine.
+Run the printed bootstrap command on a disposable Linux endpoint. The endpoint does not need this repository.
 
 After the endpoint enrolls:
 

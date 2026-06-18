@@ -1,4 +1,4 @@
-.PHONY: build test run-api compose-config compose-up compose-down rmmctl lab-headscale-key lab-restart-api lab-enroll-script lab-write-enroll-script lab-sync-nodes lab-node-list
+.PHONY: build test run-api compose-config compose-up compose-down rmmctl lab-headscale-key lab-bootstrap-token lab-restart-api lab-bootstrap-command lab-enroll-script lab-write-enroll-script lab-sync-nodes lab-node-list
 
 build:
 	go build ./cmd/rmmctl
@@ -28,8 +28,14 @@ rmmctl:
 lab-headscale-key:
 	./scripts/lab-headscale-key.sh
 
+lab-bootstrap-token:
+	./scripts/lab-bootstrap-token.sh
+
 lab-restart-api:
 	./scripts/lab-restart-api.sh
+
+lab-bootstrap-command:
+	./scripts/lab-bootstrap-command.sh "$(CONTROL_PLANE_URL)"
 
 lab-enroll-script:
 	$(MAKE) rmmctl ARGS="node enroll-script --os linux --user lab --ttl 1h --tags tag:rmm-agent --login-server $(LOGIN_SERVER)"

@@ -70,9 +70,9 @@ Lab shortcut commands:
 make compose-up
 podman exec fizrmm-cli_headscale_1 headscale users create lab
 make lab-headscale-key
+make lab-bootstrap-token
 make lab-restart-api
-make lab-enroll-script LOGIN_SERVER=http://<this-pc-ip>:8081
-make lab-write-enroll-script LOGIN_SERVER=http://<this-pc-ip>:8081
+make lab-bootstrap-command CONTROL_PLANE_URL=http://<this-pc-ip>:8080
 make lab-sync-nodes
 make lab-node-list
 ```

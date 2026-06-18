@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"fizrmm-cli/internal/config"
+	"fizrmm-cli/internal/enrollment"
 	"fizrmm-cli/internal/headscale"
 	"fizrmm-cli/internal/store"
 	"fizrmm-cli/internal/version"
@@ -70,6 +71,7 @@ func main() {
 	mux.HandleFunc("/v1/audit-events", emptyListHandler("audit_events"))
 	mux.HandleFunc("/v1/overlay/nodes", overlayNodesHandler(db, hs))
 	mux.HandleFunc("/v1/overlay/preauthkeys", overlayPreAuthKeysHandler(db, hs))
+	mux.HandleFunc("/bootstrap/linux", bootstrapLinuxHandler(db, hs, cfg))
 
 	server := &http.Server{
 		Addr:              *addr,
@@ -83,12 +85,150 @@ func main() {
 	}
 }
 
+func bootstrapLinuxHandler(db *sql.DB, hs *headscale.Client, cfg config.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		if cfg.BootstrapToken == "" {
+			writeError(w, http.StatusServiceUnavailable, "bootstrap_disabled", "bootstrap token is not configured")
+			return
+		}
+		if !constantTimeEqual(r.URL.Query().Get("token"), cfg.BootstrapToken) {
+			writeError(w, http.StatusUnauthorized, "invalid_bootstrap_token", "invalid bootstrap token")
+			return
+		}
+		if !hs.Configured() {
+			writeError(w, http.StatusServiceUnavailable, "headscale_unconfigured", "Headscale URL and API key are required")
+			return
+		}
+
+		user := strings.TrimSpace(r.URL.Query().Get("user"))
+		if user == "" {
+			user = "lab"
+		}
+		ttl := 1 * time.Hour
+		if requestedTTL := r.URL.Query().Get("ttl"); requestedTTL != "" {
+			parsed, err := time.ParseDuration(requestedTTL)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_ttl", err.Error())
+				return
+			}
+			ttl = parsed
+		}
+		if ttl <= 0 || ttl > 24*time.Hour {
+			writeError(w, http.StatusBadRequest, "invalid_ttl", "ttl must be greater than 0 and no more than 24h")
+			return
+		}
+
+		loginServer := strings.TrimSpace(r.URL.Query().Get("login_server"))
+		if loginServer == "" {
+			loginServer = strings.TrimRight(cfg.PublicBaseURL, "/")
+			loginServer = strings.TrimSuffix(loginServer, ":8080") + ":8081"
+		}
+		hostname := strings.TrimSpace(r.URL.Query().Get("hostname"))
+		tags := splitQueryCSV(r.URL.Query().Get("tags"))
+		if len(tags) == 0 {
+			tags = []string{"tag:rmm-agent"}
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		key, err := hs.CreatePreAuthKey(ctx, headscale.CreatePreAuthKeyRequest{
+			User:       user,
+			Reusable:   false,
+			Ephemeral:  false,
+			Expiration: time.Now().UTC().Add(ttl),
+			ACLTags:    tags,
+		})
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "headscale_preauthkey_create_failed", err.Error())
+			return
+		}
+
+		actor := "bootstrap:" + clientIP(r)
+		if db != nil {
+			tenantID, err := store.EnsureTenant(ctx, db, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "tenant_record_failed", err.Error())
+				return
+			}
+			if err := store.RecordEnrollmentKey(ctx, db, store.EnrollmentKeyInput{
+				TenantID:       &tenantID,
+				HeadscaleKeyID: key.ID,
+				Key:            key.Key,
+				UserName:       user,
+				Tags:           tags,
+				Reusable:       false,
+				Ephemeral:      false,
+				ExpiresAt:      key.Expiration,
+				CreatedBy:      actor,
+			}); err != nil {
+				writeError(w, http.StatusInternalServerError, "enrollment_key_record_failed", err.Error())
+				return
+			}
+			if err := store.RecordAuditEvent(ctx, db, &tenantID, actor, "bootstrap.linux", "headscale_preauthkey", key.ID, map[string]any{
+				"user":        user,
+				"tags":        tags,
+				"expiresAt":   key.Expiration,
+				"loginServer": loginServer,
+			}); err != nil {
+				writeError(w, http.StatusInternalServerError, "audit_record_failed", err.Error())
+				return
+			}
+		}
+
+		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, enrollment.LinuxScript(loginServer, key.Key, hostname))
+	}
+}
+
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func splitQueryCSV(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			result = append(result, part)
+		}
+	}
+	return result
+}
+
+func clientIP(r *http.Request) string {
+	forwardedFor := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
+	if forwardedFor != "" {
+		parts := strings.Split(forwardedFor, ",")
+		return strings.TrimSpace(parts[0])
+	}
+	return r.RemoteAddr
+}
+
+func constantTimeEqual(a string, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	var result byte
+	for i := range a {
+		result |= a[i] ^ b[i]
+	}
+	return result == 0
 }
 
 func versionHandler(w http.ResponseWriter, r *http.Request) {
