@@ -1,0 +1,12 @@
+/.env
+/.env.*
+!/.env.example
+/.gitdata/
+/rmm-api
+/rmmctl
+/bin/
+/dist/
+/tmp/
+*.log
+*.sqlite
+*.db

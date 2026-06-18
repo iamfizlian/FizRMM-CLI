@@ -1,0 +1,23 @@
+{
+  "groups": {},
+  "tagOwners": {
+    "tag:rmm-controller": [],
+    "tag:rmm-operator": [],
+    "tag:rmm-agent": [],
+    "tag:monitoring": []
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["tag:rmm-controller"],
+      "dst": ["tag:rmm-agent:22", "tag:rmm-agent:5985", "tag:rmm-agent:5986"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:monitoring"],
+      "dst": ["tag:rmm-agent:9100", "tag:rmm-agent:9182"]
+    }
+  ],
+  "ssh": []
+}
+

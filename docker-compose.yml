@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: docker.io/library/postgres:16.4
+    environment:
+      POSTGRES_DB: fizrmm
+      POSTGRES_USER: fizrmm
+      POSTGRES_PASSWORD: fizrmm-lab-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fizrmm -d fizrmm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - control
+
+  headscale:
+    image: docker.io/headscale/headscale:0.23.0
+    command: ["serve"]
+    volumes:
+      - ./configs/headscale/config.yaml:/etc/headscale/config.yaml:ro
+      - ./configs/headscale/policy.hujson:/etc/headscale/policy.hujson:ro
+      - headscale-data:/var/lib/headscale
+    ports:
+      - "8081:8080"
+      - "3478:3478/udp"
+    networks:
+      - control
+
+  prometheus:
+    image: docker.io/prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - control
+
+  alertmanager:
+    image: docker.io/prom/alertmanager:v0.27.0
+    ports:
+      - "9093:9093"
+    networks:
+      - control
+
+  loki:
+    image: docker.io/grafana/loki:3.1.1
+    ports:
+      - "3100:3100"
+    networks:
+      - control
+
+  rmm-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: rmm-api
+    environment:
+      RMM_API_ADDR: ":8080"
+      RMM_AUTO_MIGRATE: "true"
+      RMM_DATABASE_URL: "postgres://fizrmm:fizrmm-lab-password@postgres:5432/fizrmm?sslmode=disable"
+      RMM_HEADSCALE_API_KEY: "${RMM_HEADSCALE_API_KEY:-}"
+      RMM_HEADSCALE_URL: "http://headscale:8080"
+      RMM_MIGRATIONS_DIR: "/migrations"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    networks:
+      - control
+
+networks:
+  control:
+
+volumes:
+  postgres-data:
+  headscale-data:
+  prometheus-data:
