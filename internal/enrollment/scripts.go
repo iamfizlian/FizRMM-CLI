@@ -28,6 +28,7 @@ fi
 
 sudo tailscale up \
   --reset \
+  --force-reauth \
   --login-server "${LOGIN_SERVER}" \
   --authkey "${AUTH_KEY}" \
   --hostname "${HOSTNAME}" \
