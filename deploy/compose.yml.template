@@ -60,6 +60,12 @@ services:
       RMM_HEADSCALE_URL: "http://headscale:8080"
       RMM_MIGRATIONS_DIR: "__RMM_MIGRATIONS_DIR__"
       RMM_PUBLIC_BASE_URL: "__RMM_PUBLIC_BASE_URL__"
+      RMM_SSH_PRIVATE_KEY_FILE: "/run/secrets/rmm_ssh_private_key"
+      RMM_SSH_PUBLIC_KEY: "__RMM_SSH_PUBLIC_KEY__"
+      RMM_SSH_USER: "__RMM_SSH_USER__"
+      RMM_SSH_PORT: "__RMM_SSH_PORT__"
+    volumes:
+      - __REPO_ROOT__/deploy/generated/ssh/id_ed25519:/run/secrets/rmm_ssh_private_key:ro
     depends_on:
       postgres:
         condition: service_healthy

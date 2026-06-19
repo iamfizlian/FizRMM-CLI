@@ -1,9 +1,9 @@
 {
   "groups": {},
   "tagOwners": {
-    "tag:rmm-controller": [],
-    "tag:rmm-operator": [],
-    "tag:rmm-agent": [],
+    "tag:rmm-controller": ["lab"],
+    "tag:rmm-operator": ["lab"],
+    "tag:rmm-agent": ["lab"],
     "tag:monitoring": []
   },
   "acls": [
@@ -20,4 +20,3 @@
   ],
   "ssh": []
 }
-

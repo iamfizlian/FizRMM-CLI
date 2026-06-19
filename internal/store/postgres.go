@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,6 +49,24 @@ type EnrollmentKeyInput struct {
 	Ephemeral      bool
 	ExpiresAt      *time.Time
 	CreatedBy      string
+}
+
+type CommandJobInput struct {
+	TenantID *int64
+	NodeID   int64
+	Actor    string
+	Command  string
+	Reason   string
+}
+
+type CommandJobResultInput struct {
+	JobID      int64
+	NodeID     int64
+	ExitCode   int
+	Stdout     string
+	Stderr     string
+	StartedAt  time.Time
+	FinishedAt time.Time
 }
 
 func Open(ctx context.Context, databaseURL string) (*sql.DB, error) {
@@ -153,6 +172,63 @@ ORDER BY hostname`)
 		return nil, err
 	}
 	return nodes, nil
+}
+
+func FindNode(ctx context.Context, db *sql.DB, identifier string) (Node, error) {
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" {
+		return Node{}, fmt.Errorf("node identifier is required")
+	}
+
+	where := "hostname = $1"
+	if _, err := strconv.ParseInt(identifier, 10, 64); err == nil {
+		where = "id = $1"
+	}
+
+	row := db.QueryRowContext(ctx, `
+SELECT
+  id,
+  tenant_id,
+  site_id,
+  hostname,
+  fqdn,
+  os_family,
+  os_version,
+  architecture,
+  headscale_node_id,
+  tailnet_ip::text,
+  last_seen_at,
+  status,
+  tags,
+  created_at
+FROM nodes
+WHERE `+where+`
+ORDER BY id
+LIMIT 1`, identifier)
+
+	var node Node
+	if err := row.Scan(
+		&node.ID,
+		&node.TenantID,
+		&node.SiteID,
+		&node.Hostname,
+		&node.FQDN,
+		&node.OSFamily,
+		&node.OSVersion,
+		&node.Architecture,
+		&node.HeadscaleNodeID,
+		&node.TailnetIP,
+		&node.LastSeenAt,
+		&node.Status,
+		&node.Tags,
+		&node.CreatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return Node{}, fmt.Errorf("node %q not found", identifier)
+		}
+		return Node{}, err
+	}
+	return node, nil
 }
 
 func SyncHeadscaleNodes(ctx context.Context, db *sql.DB, headscaleNodes []headscale.Node) (int, error) {
@@ -299,6 +375,70 @@ INSERT INTO audit_events (
 VALUES ($1, $2, $3, $4, $5, $6)`, tenantID, actor, action, targetType, targetID, metadataJSON)
 	if err != nil {
 		return fmt.Errorf("record audit event: %w", err)
+	}
+	return nil
+}
+
+func CreateCommandJob(ctx context.Context, db *sql.DB, input CommandJobInput) (int64, error) {
+	var id int64
+	err := db.QueryRowContext(ctx, `
+INSERT INTO jobs (
+  tenant_id,
+  created_by,
+  type,
+  status,
+  target_selector,
+  command_or_playbook,
+  reason,
+  started_at
+)
+VALUES ($1, $2, 'ssh_command', 'running', $3, $4, $5, now())
+RETURNING id`,
+		input.TenantID,
+		input.Actor,
+		fmt.Sprintf("node:%d", input.NodeID),
+		input.Command,
+		input.Reason,
+	).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("create command job: %w", err)
+	}
+	return id, nil
+}
+
+func FinishCommandJob(ctx context.Context, db *sql.DB, jobID int64, status string) error {
+	_, err := db.ExecContext(ctx, `
+UPDATE jobs
+SET status = $2, finished_at = now()
+WHERE id = $1`, jobID, status)
+	if err != nil {
+		return fmt.Errorf("finish command job: %w", err)
+	}
+	return nil
+}
+
+func RecordCommandJobResult(ctx context.Context, db *sql.DB, input CommandJobResultInput) error {
+	_, err := db.ExecContext(ctx, `
+INSERT INTO job_results (
+  job_id,
+  node_id,
+  exit_code,
+  stdout_ref,
+  stderr_ref,
+  started_at,
+  finished_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		input.JobID,
+		input.NodeID,
+		input.ExitCode,
+		input.Stdout,
+		input.Stderr,
+		input.StartedAt,
+		input.FinishedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("record command result: %w", err)
 	}
 	return nil
 }

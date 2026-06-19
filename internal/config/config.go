@@ -11,6 +11,11 @@ type API struct {
 	HeadscaleKey   string
 	BootstrapToken string
 	PublicBaseURL  string
+	SSHUser        string
+	SSHPrivateKey  string
+	SSHKeyFile     string
+	SSHPublicKey   string
+	SSHPort        string
 }
 
 func LoadAPI() API {
@@ -23,6 +28,11 @@ func LoadAPI() API {
 		HeadscaleKey:   os.Getenv("RMM_HEADSCALE_API_KEY"),
 		BootstrapToken: os.Getenv("RMM_BOOTSTRAP_TOKEN"),
 		PublicBaseURL:  envOrDefault("RMM_PUBLIC_BASE_URL", "http://localhost:8080"),
+		SSHUser:        envOrDefault("RMM_SSH_USER", "rmm"),
+		SSHPrivateKey:  os.Getenv("RMM_SSH_PRIVATE_KEY"),
+		SSHKeyFile:     os.Getenv("RMM_SSH_PRIVATE_KEY_FILE"),
+		SSHPublicKey:   os.Getenv("RMM_SSH_PUBLIC_KEY"),
+		SSHPort:        envOrDefault("RMM_SSH_PORT", "22"),
 	}
 }
 

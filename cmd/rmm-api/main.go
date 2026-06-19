@@ -15,6 +15,7 @@ import (
 	"fizrmm-cli/internal/config"
 	"fizrmm-cli/internal/enrollment"
 	"fizrmm-cli/internal/headscale"
+	"fizrmm-cli/internal/remote"
 	"fizrmm-cli/internal/store"
 	"fizrmm-cli/internal/version"
 )
@@ -67,6 +68,7 @@ func main() {
 	mux.HandleFunc("/v1/sites", emptyListHandler("sites"))
 	mux.HandleFunc("/v1/nodes", nodesHandler(db, hs))
 	mux.HandleFunc("/v1/jobs", emptyListHandler("jobs"))
+	mux.HandleFunc("/v1/commands/run", commandRunHandler(db, cfg))
 	mux.HandleFunc("/v1/alerts", emptyListHandler("alerts"))
 	mux.HandleFunc("/v1/audit-events", emptyListHandler("audit_events"))
 	mux.HandleFunc("/v1/overlay/nodes", overlayNodesHandler(db, hs))
@@ -183,7 +185,7 @@ func bootstrapLinuxHandler(db *sql.DB, hs *headscale.Client, cfg config.API) htt
 		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprint(w, enrollment.LinuxScript(loginServer, key.Key, hostname))
+		_, _ = fmt.Fprint(w, enrollment.LinuxScript(loginServer, key.Key, hostname, cfg.SSHUser, cfg.SSHPublicKey))
 	}
 }
 
@@ -468,6 +470,156 @@ func overlayPreAuthKeysHandler(db *sql.DB, hs *headscale.Client) http.HandlerFun
 			"meta": map[string]any{
 				"resource": "overlay_preauthkey",
 				"source":   "headscale",
+			},
+		})
+	}
+}
+
+func commandRunHandler(db *sql.DB, cfg config.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		if db == nil {
+			writeError(w, http.StatusServiceUnavailable, "database_unconfigured", "database is required for command execution")
+			return
+		}
+
+		var request struct {
+			Node    string `json:"node"`
+			Command string `json:"command"`
+			Timeout string `json:"timeout"`
+			Reason  string `json:"reason"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+			return
+		}
+		request.Node = strings.TrimSpace(request.Node)
+		request.Command = strings.TrimSpace(request.Command)
+		if request.Node == "" {
+			writeError(w, http.StatusBadRequest, "missing_node", "node is required")
+			return
+		}
+		if request.Command == "" {
+			writeError(w, http.StatusBadRequest, "missing_command", "command is required")
+			return
+		}
+
+		timeout := 30 * time.Second
+		if request.Timeout != "" {
+			parsed, err := time.ParseDuration(request.Timeout)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_timeout", err.Error())
+				return
+			}
+			timeout = parsed
+		}
+		if timeout <= 0 || timeout > 5*time.Minute {
+			writeError(w, http.StatusBadRequest, "invalid_timeout", "timeout must be greater than 0 and no more than 5m")
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), timeout+5*time.Second)
+		defer cancel()
+
+		node, err := store.FindNode(ctx, db, request.Node)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "node_not_found", err.Error())
+			return
+		}
+		if node.TailnetIP == nil || *node.TailnetIP == "" {
+			writeError(w, http.StatusConflict, "node_missing_tailnet_ip", "node has no tailnet IP")
+			return
+		}
+
+		actor := strings.TrimSpace(r.Header.Get("X-RMM-Actor"))
+		if actor == "" {
+			actor = "system:anonymous"
+		}
+
+		tenantID := node.TenantID
+		jobID, err := store.CreateCommandJob(ctx, db, store.CommandJobInput{
+			TenantID: &tenantID,
+			NodeID:   node.ID,
+			Actor:    actor,
+			Command:  request.Command,
+			Reason:   request.Reason,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "command_job_create_failed", err.Error())
+			return
+		}
+
+		host := *node.TailnetIP
+		if slash := strings.IndexByte(host, '/'); slash >= 0 {
+			host = host[:slash]
+		}
+
+		result, runErr := remote.RunSSHCommand(ctx, remote.SSHConfig{
+			User:       cfg.SSHUser,
+			PrivateKey: cfg.SSHPrivateKey,
+			KeyFile:    cfg.SSHKeyFile,
+			Port:       cfg.SSHPort,
+			Timeout:    timeout,
+		}, host, request.Command)
+		if result.FinishedAt.IsZero() {
+			result.FinishedAt = time.Now().UTC()
+			result.Duration = result.FinishedAt.Sub(result.StartedAt)
+		}
+
+		status := "succeeded"
+		if runErr != nil || result.ExitCode != 0 {
+			status = "failed"
+		}
+		if err := store.RecordCommandJobResult(ctx, db, store.CommandJobResultInput{
+			JobID:      jobID,
+			NodeID:     node.ID,
+			ExitCode:   result.ExitCode,
+			Stdout:     result.Stdout,
+			Stderr:     result.Stderr,
+			StartedAt:  result.StartedAt,
+			FinishedAt: result.FinishedAt,
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "command_result_record_failed", err.Error())
+			return
+		}
+		if err := store.FinishCommandJob(ctx, db, jobID, status); err != nil {
+			writeError(w, http.StatusInternalServerError, "command_job_finish_failed", err.Error())
+			return
+		}
+		if err := store.RecordAuditEvent(ctx, db, &tenantID, actor, "command.run", "node", fmt.Sprint(node.ID), map[string]any{
+			"jobID":    jobID,
+			"hostname": node.Hostname,
+			"command":  request.Command,
+			"status":   status,
+			"exitCode": result.ExitCode,
+			"reason":   request.Reason,
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "audit_record_failed", err.Error())
+			return
+		}
+		if runErr != nil {
+			writeError(w, http.StatusBadGateway, "ssh_command_failed", runErr.Error())
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": map[string]any{
+				"job_id":      jobID,
+				"node_id":     node.ID,
+				"hostname":    node.Hostname,
+				"command":     request.Command,
+				"stdout":      result.Stdout,
+				"stderr":      result.Stderr,
+				"exit_code":   result.ExitCode,
+				"started_at":  result.StartedAt,
+				"finished_at": result.FinishedAt,
+			},
+			"meta": map[string]any{
+				"resource":  "command_run",
+				"transport": "ssh",
 			},
 		})
 	}

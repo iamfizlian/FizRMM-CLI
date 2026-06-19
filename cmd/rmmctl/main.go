@@ -25,7 +25,7 @@ var commands = []command{
 	{Name: "node list", Description: "List managed nodes"},
 	{Name: "node enroll-script", Description: "Generate an endpoint enrollment script"},
 	{Name: "node ssh", Description: "Open an audited SSH session"},
-	{Name: "exec", Description: "Run an audited command"},
+	{Name: "exec", Description: "Run an audited command over SSH"},
 	{Name: "job run", Description: "Run a playbook or approved job"},
 	{Name: "alerts list", Description: "List active alerts"},
 	{Name: "overlay nodes", Description: "List overlay nodes"},
@@ -76,6 +76,11 @@ func main() {
 	case len(args) >= 3 && args[0] == "overlay" && args[1] == "preauth" && args[2] == "create":
 		if err := createPreAuthKey(*apiURL, args[3:], *jsonOutput); err != nil {
 			fmt.Fprintf(os.Stderr, "overlay preauth create failed: %v\n", err)
+			os.Exit(1)
+		}
+	case args[0] == "exec":
+		if err := runCommand(*apiURL, args[1:], *jsonOutput); err != nil {
+			fmt.Fprintf(os.Stderr, "exec failed: %v\n", err)
 			os.Exit(1)
 		}
 	case commandName == "tenant list" || commandName == "site list" || commandName == "alerts list":
@@ -171,6 +176,22 @@ type enrollmentScriptResponse struct {
 	Tags        []string `json:"tags,omitempty"`
 	Key         string   `json:"key"`
 	Script      string   `json:"script"`
+}
+
+type commandRunResponse struct {
+	Data commandRunResult `json:"data"`
+	Meta any              `json:"meta"`
+}
+
+type commandRunResult struct {
+	NodeID     int64     `json:"node_id"`
+	Hostname   string    `json:"hostname"`
+	Command    string    `json:"command"`
+	Stdout     string    `json:"stdout"`
+	Stderr     string    `json:"stderr"`
+	ExitCode   int       `json:"exit_code"`
+	StartedAt  time.Time `json:"started_at"`
+	FinishedAt time.Time `json:"finished_at"`
 }
 
 type node struct {
@@ -359,7 +380,7 @@ func generateEnrollScript(apiURL string, args []string, jsonOutput bool) error {
 		return err
 	}
 
-	script := enrollment.LinuxScript(*loginServer, key.Key, *hostname)
+	script := enrollment.LinuxScript(*loginServer, key.Key, *hostname, "", "")
 	if normalizedOS == "windows" {
 		script = enrollment.WindowsScript(*loginServer, key.Key, *hostname)
 	}
@@ -377,6 +398,57 @@ func generateEnrollScript(apiURL string, args []string, jsonOutput bool) error {
 	}
 
 	fmt.Fprint(os.Stdout, script)
+	return nil
+}
+
+func runCommand(apiURL string, args []string, jsonOutput bool) error {
+	flags := flag.NewFlagSet("exec", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	node := flags.String("node", "", "node id or hostname")
+	timeout := flags.String("timeout", "30s", "command timeout")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	command := strings.TrimSpace(strings.Join(flags.Args(), " "))
+	if *node == "" {
+		return fmt.Errorf("--node is required")
+	}
+	if command == "" {
+		return fmt.Errorf("command is required")
+	}
+
+	body, err := apiRequest(apiURL, http.MethodPost, "/v1/commands/run", map[string]any{
+		"node":    *node,
+		"command": command,
+		"timeout": *timeout,
+	})
+	if err != nil {
+		return err
+	}
+	if jsonOutput {
+		fmt.Fprintln(os.Stdout, string(body))
+		return nil
+	}
+
+	var decoded commandRunResponse
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return err
+	}
+	if decoded.Data.Stdout != "" {
+		fmt.Fprint(os.Stdout, decoded.Data.Stdout)
+		if !strings.HasSuffix(decoded.Data.Stdout, "\n") {
+			fmt.Fprintln(os.Stdout)
+		}
+	}
+	if decoded.Data.Stderr != "" {
+		fmt.Fprint(os.Stderr, decoded.Data.Stderr)
+		if !strings.HasSuffix(decoded.Data.Stderr, "\n") {
+			fmt.Fprintln(os.Stderr)
+		}
+	}
+	if decoded.Data.ExitCode != 0 {
+		return fmt.Errorf("remote command exited %d", decoded.Data.ExitCode)
+	}
 	return nil
 }
 

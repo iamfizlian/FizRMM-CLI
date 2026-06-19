@@ -19,12 +19,16 @@ for name in "${required[@]}"; do
 done
 
 mkdir -p deploy/generated
+./scripts/deploy-ssh-key.sh
 
 RMM_API_ADDR="${RMM_API_ADDR:-:8080}"
 RMM_AUTO_MIGRATE="${RMM_AUTO_MIGRATE:-true}"
 RMM_BOOTSTRAP_TOKEN="${RMM_BOOTSTRAP_TOKEN:-}"
 RMM_HEADSCALE_API_KEY="${RMM_HEADSCALE_API_KEY:-}"
 RMM_MIGRATIONS_DIR="${RMM_MIGRATIONS_DIR:-/migrations}"
+RMM_SSH_USER="${RMM_SSH_USER:-rmm}"
+RMM_SSH_PORT="${RMM_SSH_PORT:-22}"
+RMM_SSH_PUBLIC_KEY="${RMM_SSH_PUBLIC_KEY:-$(cat deploy/generated/ssh/id_ed25519.pub)}"
 
 urlencode() {
   python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
@@ -53,4 +57,7 @@ sed \
   -e "s#__RMM_HEADSCALE_API_KEY__#$(sed_escape "${RMM_HEADSCALE_API_KEY}")#g" \
   -e "s#__RMM_MIGRATIONS_DIR__#$(sed_escape "${RMM_MIGRATIONS_DIR}")#g" \
   -e "s#__RMM_PUBLIC_BASE_URL__#$(sed_escape "${RMM_PUBLIC_BASE_URL}")#g" \
+  -e "s#__RMM_SSH_USER__#$(sed_escape "${RMM_SSH_USER}")#g" \
+  -e "s#__RMM_SSH_PORT__#$(sed_escape "${RMM_SSH_PORT}")#g" \
+  -e "s#__RMM_SSH_PUBLIC_KEY__#$(sed_escape "${RMM_SSH_PUBLIC_KEY}")#g" \
   deploy/compose.yml.template > deploy/generated/compose.yml

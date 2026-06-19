@@ -1,6 +1,6 @@
 COMPOSE ?= podman-compose
 
-.PHONY: build test run-api compose-config compose-up compose-down rmmctl lab-headscale-key lab-bootstrap-token lab-restart-api lab-bootstrap-command lab-enroll-script lab-write-enroll-script lab-sync-nodes lab-node-list deploy-config deploy-up deploy-down deploy-init deploy-headscale-key deploy-bootstrap-token deploy-restart-api deploy-bootstrap-command
+.PHONY: build test run-api compose-config compose-up compose-down rmmctl lab-headscale-key lab-bootstrap-token lab-restart-api lab-bootstrap-command lab-enroll-script lab-write-enroll-script lab-sync-nodes lab-node-list deploy-config deploy-up deploy-down deploy-init deploy-ssh-key deploy-controller-enroll deploy-headscale-key deploy-bootstrap-token deploy-restart-api deploy-bootstrap-command
 
 build:
 	go build ./cmd/rmmctl
@@ -65,6 +65,12 @@ deploy-down:
 
 deploy-init:
 	./scripts/deploy-init.sh
+
+deploy-ssh-key:
+	./scripts/deploy-ssh-key.sh
+
+deploy-controller-enroll:
+	./scripts/deploy-controller-enroll.sh
 
 deploy-headscale-key:
 	./scripts/deploy-headscale-key.sh

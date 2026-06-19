@@ -102,6 +102,12 @@ make deploy-up
 make deploy-init
 ```
 
+Enroll the RMM server itself as a Headscale controller so it can reach endpoint tailnet IPs for SSH actions:
+
+```bash
+make deploy-controller-enroll
+```
+
 Run the printed `curl -fsSL ... | sudo bash` command on an endpoint.
 
 After the endpoint enrolls, listing nodes refreshes Headscale state automatically:
@@ -111,4 +117,13 @@ podman run --rm --network host \
   -v "$PWD:/src:Z" \
   -w /src docker.io/library/golang:1.22 \
   go run ./cmd/rmmctl --api-url "https://${RMM_DOMAIN}" node list
+```
+
+Run an audited SSH command against an enrolled node:
+
+```bash
+podman run --rm --network host \
+  -v "$PWD:/src:Z" \
+  -w /src docker.io/library/golang:1.22 \
+  go run ./cmd/rmmctl --api-url "https://${RMM_DOMAIN}" exec --node fiz-ubu-acdx -- hostname
 ```

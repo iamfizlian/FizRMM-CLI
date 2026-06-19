@@ -76,6 +76,12 @@ make lab-bootstrap-command CONTROL_PLANE_URL=http://<this-pc-ip>:8080
 make lab-node-list
 ```
 
+Remote commands use the audited `exec` command once the RMM server can route to endpoint tailnet IPs:
+
+```bash
+go run ./cmd/rmmctl --api-url https://rmm.example.com exec --node node-hostname -- hostname
+```
+
 Start the lab:
 
 ```bash
