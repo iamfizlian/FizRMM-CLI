@@ -1,0 +1,76 @@
+services:
+  caddy:
+    image: docker.io/library/caddy:2.8.4
+    restart: unless-stopped
+    environment:
+      RMM_DOMAIN: ${RMM_DOMAIN}
+      HEADSCALE_DOMAIN: ${HEADSCALE_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - control
+
+  postgres:
+    image: docker.io/library/postgres:16.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fizrmm
+      POSTGRES_USER: fizrmm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fizrmm -d fizrmm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - control
+
+  headscale:
+    image: docker.io/headscale/headscale:0.23.0
+    restart: unless-stopped
+    command: ["serve"]
+    volumes:
+      - ./deploy/generated/headscale-config.yaml:/etc/headscale/config.yaml:ro
+      - ./configs/headscale/policy.hujson:/etc/headscale/policy.hujson:ro
+      - headscale-data:/var/lib/headscale
+    ports:
+      - "3478:3478/udp"
+    networks:
+      - control
+
+  rmm-api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: rmm-api
+    restart: unless-stopped
+    environment:
+      RMM_API_ADDR: ${RMM_API_ADDR:-:8080}
+      RMM_AUTO_MIGRATE: ${RMM_AUTO_MIGRATE:-true}
+      RMM_BOOTSTRAP_TOKEN: ${RMM_BOOTSTRAP_TOKEN:-}
+      RMM_DATABASE_URL: postgres://fizrmm:${POSTGRES_PASSWORD}@postgres:5432/fizrmm?sslmode=disable
+      RMM_HEADSCALE_API_KEY: ${RMM_HEADSCALE_API_KEY:-}
+      RMM_HEADSCALE_URL: http://headscale:8080
+      RMM_MIGRATIONS_DIR: ${RMM_MIGRATIONS_DIR:-/migrations}
+      RMM_PUBLIC_BASE_URL: ${RMM_PUBLIC_BASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - control
+
+networks:
+  control:
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+  headscale-data:

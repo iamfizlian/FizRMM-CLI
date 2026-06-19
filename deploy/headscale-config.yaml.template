@@ -1,0 +1,36 @@
+server_url: https://__HEADSCALE_DOMAIN__
+listen_addr: 0.0.0.0:8080
+metrics_listen_addr: 0.0.0.0:9090
+
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+
+dns:
+  magic_dns: true
+  base_domain: tailnet.__HEADSCALE_DOMAIN__
+  nameservers:
+    global:
+      - 1.1.1.1
+      - 8.8.8.8
+
+derp:
+  server:
+    enabled: true
+    region_id: 999
+    region_code: fizrmm
+    region_name: FizRMM
+    private_key_path: /var/lib/headscale/derp_server_private.key
+    stun_listen_addr: 0.0.0.0:3478
+
+policy:
+  mode: file
+  path: /etc/headscale/policy.hujson

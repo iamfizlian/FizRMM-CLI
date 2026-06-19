@@ -1,4 +1,4 @@
-.PHONY: build test run-api compose-config compose-up compose-down rmmctl lab-headscale-key lab-bootstrap-token lab-restart-api lab-bootstrap-command lab-enroll-script lab-write-enroll-script lab-sync-nodes lab-node-list
+.PHONY: build test run-api compose-config compose-up compose-down rmmctl lab-headscale-key lab-bootstrap-token lab-restart-api lab-bootstrap-command lab-enroll-script lab-write-enroll-script lab-sync-nodes lab-node-list deploy-config deploy-up deploy-down deploy-headscale-key deploy-bootstrap-token deploy-restart-api deploy-bootstrap-command
 
 build:
 	go build ./cmd/rmmctl
@@ -48,3 +48,27 @@ lab-sync-nodes:
 
 lab-node-list:
 	$(MAKE) rmmctl ARGS="node list"
+
+deploy-config:
+	./scripts/deploy-render.sh
+	podman compose -f deploy/compose.yml --env-file .env config
+
+deploy-up:
+	./scripts/deploy-render.sh
+	podman compose -f deploy/compose.yml --env-file .env up -d
+
+deploy-down:
+	podman compose -f deploy/compose.yml --env-file .env down
+
+deploy-headscale-key:
+	./scripts/deploy-headscale-key.sh
+
+deploy-bootstrap-token:
+	./scripts/lab-bootstrap-token.sh
+
+deploy-restart-api:
+	./scripts/deploy-render.sh
+	podman compose -f deploy/compose.yml --env-file .env up -d --force-recreate rmm-api
+
+deploy-bootstrap-command:
+	./scripts/deploy-bootstrap-command.sh

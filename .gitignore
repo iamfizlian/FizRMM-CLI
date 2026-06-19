@@ -2,6 +2,7 @@
 /.env.*
 !/.env.example
 /.gitdata/
+/deploy/generated/
 /rmm-api
 /rmmctl
 /bin/

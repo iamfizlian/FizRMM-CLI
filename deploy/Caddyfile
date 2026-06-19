@@ -1,0 +1,7 @@
+{$RMM_DOMAIN} {
+	reverse_proxy rmm-api:8080
+}
+
+{$HEADSCALE_DOMAIN} {
+	reverse_proxy headscale:8080
+}
