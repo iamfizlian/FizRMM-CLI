@@ -59,10 +59,12 @@ fi
 
 ./scripts/deploy-render.sh
 "${compose_cmd}" -f "${compose_file}" up -d --force-recreate headscale
+"${compose_cmd}" -f "${compose_file}" up -d caddy rmm-api
 
 echo "Requesting controller enrollment key from RMM API..."
 payload="$(printf '{"user":%s,"ttl":"24h","tags":[]}' "$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "${headscale_user}")")"
 if ! curl -fsSL \
+  --resolve "${RMM_DOMAIN}:443:127.0.0.1" \
   -H "Content-Type: application/json" \
   -H "X-RMM-Actor: deploy-controller-enroll" \
   -d "${payload}" \
