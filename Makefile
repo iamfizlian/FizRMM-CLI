@@ -1,3 +1,5 @@
+COMPOSE ?= podman-compose
+
 .PHONY: build test run-api compose-config compose-up compose-down rmmctl lab-headscale-key lab-bootstrap-token lab-restart-api lab-bootstrap-command lab-enroll-script lab-write-enroll-script lab-sync-nodes lab-node-list deploy-config deploy-up deploy-down deploy-headscale-key deploy-bootstrap-token deploy-restart-api deploy-bootstrap-command
 
 build:
@@ -11,13 +13,13 @@ run-api:
 	go run ./cmd/rmm-api
 
 compose-config:
-	podman compose config
+	$(COMPOSE) config
 
 compose-up:
-	podman compose up -d
+	$(COMPOSE) up -d
 
 compose-down:
-	podman compose down
+	$(COMPOSE) down
 
 rmmctl:
 	podman run --rm --network host \
@@ -51,14 +53,14 @@ lab-node-list:
 
 deploy-config:
 	./scripts/deploy-render.sh
-	podman compose -f deploy/compose.yml --env-file .env config
+	$(COMPOSE) -f deploy/compose.yml --env-file .env config
 
 deploy-up:
 	./scripts/deploy-render.sh
-	podman compose -f deploy/compose.yml --env-file .env up -d
+	$(COMPOSE) -f deploy/compose.yml --env-file .env up -d
 
 deploy-down:
-	podman compose -f deploy/compose.yml --env-file .env down
+	$(COMPOSE) -f deploy/compose.yml --env-file .env down
 
 deploy-headscale-key:
 	./scripts/deploy-headscale-key.sh
@@ -68,7 +70,7 @@ deploy-bootstrap-token:
 
 deploy-restart-api:
 	./scripts/deploy-render.sh
-	podman compose -f deploy/compose.yml --env-file .env up -d --force-recreate rmm-api
+	$(COMPOSE) -f deploy/compose.yml --env-file .env up -d --force-recreate rmm-api
 
 deploy-bootstrap-command:
 	./scripts/deploy-bootstrap-command.sh

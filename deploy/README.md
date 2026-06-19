@@ -12,6 +12,7 @@ This profile is for a reachable server, usually a small VPS.
   - TCP `443`
   - UDP `3478`
 - Podman with Compose support.
+- `podman-compose` on Ubuntu is supported and is the default used by this Makefile.
 - Ports `80` and `443` free on the server.
 
 ## DNS And TLS
@@ -103,7 +104,7 @@ make deploy-up
 Create the Headscale user once:
 
 ```bash
-podman compose -f deploy/compose.yml --env-file .env exec headscale headscale users create lab
+podman-compose -f deploy/compose.yml --env-file .env exec headscale headscale users create lab
 ```
 
 Create the Headscale API key for `rmm-api`:

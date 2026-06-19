@@ -6,7 +6,8 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-key="$(podman compose -f deploy/compose.yml --env-file .env exec headscale headscale apikeys create --expiration 24h | tail -n 1)"
+compose_cmd="${COMPOSE_CMD:-podman-compose}"
+key="$("${compose_cmd}" -f deploy/compose.yml --env-file .env exec headscale headscale apikeys create --expiration 24h | tail -n 1)"
 
 if [[ -z "${key}" ]]; then
   echo "failed to create Headscale API key" >&2

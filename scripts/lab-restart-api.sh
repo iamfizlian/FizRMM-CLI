@@ -19,7 +19,8 @@ if [[ -z "${RMM_BOOTSTRAP_TOKEN:-}" ]]; then
   exit 1
 fi
 
-podman compose up -d --force-recreate rmm-api
+compose_cmd="${COMPOSE_CMD:-podman-compose}"
+"${compose_cmd}" up -d --force-recreate rmm-api
 
 echo "rmm-api restarted with Headscale API access"
 echo "Next: make lab-bootstrap-command CONTROL_PLANE_URL=http://<this-pc-ip>:8080"
