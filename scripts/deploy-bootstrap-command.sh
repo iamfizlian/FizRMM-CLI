@@ -13,7 +13,8 @@ if [[ -z "${RMM_BOOTSTRAP_TOKEN:-}" ]]; then
   exit 1
 fi
 
-url="https://${RMM_DOMAIN}/bootstrap/linux?token=${RMM_BOOTSTRAP_TOKEN}&user=lab&ttl=1h&tags=tag:rmm-agent&login_server=https://${HEADSCALE_DOMAIN}"
+headscale_user="${DEPLOY_HEADSCALE_USER:-lab}"
+url="https://${RMM_DOMAIN}/bootstrap/linux?token=${RMM_BOOTSTRAP_TOKEN}&user=${headscale_user}&ttl=1h&tags=tag:rmm-agent&login_server=https://${HEADSCALE_DOMAIN}"
 
 echo "Run this on the endpoint:"
 echo

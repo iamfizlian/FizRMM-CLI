@@ -95,29 +95,11 @@ Generate a bootstrap token:
 make deploy-bootstrap-token
 ```
 
-Start the server:
+Start the server and finish the initial Headscale/RMM wiring:
 
 ```bash
 make deploy-up
-```
-
-Create the Headscale user once:
-
-```bash
-podman-compose -f deploy/generated/compose.yml exec headscale headscale users create lab
-```
-
-Create the Headscale API key for `rmm-api`:
-
-```bash
-make deploy-headscale-key
-make deploy-restart-api
-```
-
-Print the endpoint bootstrap command:
-
-```bash
-make deploy-bootstrap-command
+make deploy-init
 ```
 
 Run the printed `curl -fsSL ... | sudo bash` command on an endpoint.
