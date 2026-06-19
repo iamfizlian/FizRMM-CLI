@@ -64,13 +64,10 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
-"${compose_cmd}" -f "${compose_file}" exec headscale headscale users list >/tmp/fizrmm-headscale-users.txt
-if ! grep -Eq "(^|[[:space:]])${headscale_user}($|[[:space:]])" /tmp/fizrmm-headscale-users.txt; then
-  if ! "${compose_cmd}" -f "${compose_file}" exec headscale headscale users create "${headscale_user}" 2>/tmp/fizrmm-headscale-user-create.err; then
-    if ! grep -qi "already exists" /tmp/fizrmm-headscale-user-create.err; then
-      cat /tmp/fizrmm-headscale-user-create.err >&2
-      exit 1
-    fi
+if ! "${compose_cmd}" -f "${compose_file}" exec headscale headscale users create "${headscale_user}" >/tmp/fizrmm-headscale-user-create.out 2>&1; then
+  if ! grep -qi "already exists" /tmp/fizrmm-headscale-user-create.out; then
+    cat /tmp/fizrmm-headscale-user-create.out >&2
+    exit 1
   fi
 fi
 
