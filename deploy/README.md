@@ -104,7 +104,7 @@ make deploy-up
 Create the Headscale user once:
 
 ```bash
-podman-compose -f deploy/compose.yml --env-file .env exec headscale headscale users create lab
+podman-compose -f deploy/generated/compose.yml exec headscale headscale users create lab
 ```
 
 Create the Headscale API key for `rmm-api`:

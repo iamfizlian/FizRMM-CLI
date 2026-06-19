@@ -53,14 +53,14 @@ lab-node-list:
 
 deploy-config:
 	./scripts/deploy-render.sh
-	$(COMPOSE) -f deploy/compose.yml --env-file .env config
+	$(COMPOSE) -f deploy/generated/compose.yml config
 
 deploy-up:
 	./scripts/deploy-render.sh
-	$(COMPOSE) -f deploy/compose.yml --env-file .env up -d
+	$(COMPOSE) -f deploy/generated/compose.yml up -d
 
 deploy-down:
-	$(COMPOSE) -f deploy/compose.yml --env-file .env down
+	$(COMPOSE) -f deploy/generated/compose.yml down
 
 deploy-headscale-key:
 	./scripts/deploy-headscale-key.sh
@@ -70,7 +70,7 @@ deploy-bootstrap-token:
 
 deploy-restart-api:
 	./scripts/deploy-render.sh
-	$(COMPOSE) -f deploy/compose.yml --env-file .env up -d --force-recreate rmm-api
+	$(COMPOSE) -f deploy/generated/compose.yml up -d --force-recreate rmm-api
 
 deploy-bootstrap-command:
 	./scripts/deploy-bootstrap-command.sh
