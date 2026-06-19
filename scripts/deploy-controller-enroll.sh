@@ -21,7 +21,7 @@ headscale_user="${DEPLOY_HEADSCALE_USER:-lab}"
 hostname="${RMM_CONTROLLER_HOSTNAME:-fizrmm-controller}"
 
 headscale_exec() {
-  podman exec "${headscale_container}" headscale "$@"
+  timeout 10s podman exec "${headscale_container}" headscale "$@"
 }
 
 wait_for_apt_locks() {
