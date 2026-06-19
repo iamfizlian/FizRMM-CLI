@@ -71,10 +71,13 @@ if ! "${compose_cmd}" -f "${compose_file}" exec headscale headscale users create
   fi
 fi
 
-key="$("${compose_cmd}" -f "${compose_file}" exec headscale headscale preauthkeys create \
+if ! "${compose_cmd}" -f "${compose_file}" exec headscale headscale preauthkeys create \
   --user "${headscale_user}" \
-  --expiration 24h \
-  --acl-tags tag:rmm-controller | tail -n 1)"
+  --expiration 24h >/tmp/fizrmm-controller-preauth.out 2>&1; then
+  cat /tmp/fizrmm-controller-preauth.out >&2
+  exit 1
+fi
+key="$(tail -n 1 /tmp/fizrmm-controller-preauth.out)"
 
 sudo tailscale up \
   --reset \

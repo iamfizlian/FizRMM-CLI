@@ -9,7 +9,7 @@
   "acls": [
     {
       "action": "accept",
-      "src": ["tag:rmm-controller"],
+      "src": ["tag:rmm-controller", "lab"],
       "dst": ["tag:rmm-agent:22", "tag:rmm-agent:5985", "tag:rmm-agent:5986"]
     },
     {
