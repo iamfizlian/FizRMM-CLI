@@ -104,11 +104,11 @@ make deploy-init
 
 Run the printed `curl -fsSL ... | sudo bash` command on an endpoint.
 
-After the endpoint enrolls:
+After the endpoint enrolls, listing nodes refreshes Headscale state automatically:
 
 ```bash
 podman run --rm --network host \
   -v "$PWD:/src:Z" \
   -w /src docker.io/library/golang:1.22 \
-  go run ./cmd/rmmctl --api-url "https://${RMM_DOMAIN}" overlay nodes sync
+  go run ./cmd/rmmctl --api-url "https://${RMM_DOMAIN}" node list
 ```

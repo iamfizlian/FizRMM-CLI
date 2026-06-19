@@ -14,9 +14,8 @@ make lab-bootstrap-command CONTROL_PLANE_URL=http://<this-pc-ip>:8080
 
 Run the printed bootstrap command on a disposable Linux endpoint. The endpoint does not need this repository.
 
-After the endpoint enrolls:
+After the endpoint enrolls, `node list` refreshes Headscale state automatically:
 
 ```bash
-make lab-sync-nodes
 make lab-node-list
 ```

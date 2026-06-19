@@ -73,7 +73,6 @@ make lab-headscale-key
 make lab-bootstrap-token
 make lab-restart-api
 make lab-bootstrap-command CONTROL_PLANE_URL=http://<this-pc-ip>:8080
-make lab-sync-nodes
 make lab-node-list
 ```
 
@@ -96,5 +95,5 @@ podman compose config
 1. Run `gofmt`, `go mod tidy`, and `go test ./...` on a machine with Go installed.
 2. Validate the lab with `podman compose config` and `podman compose up -d`.
 3. Expand migrations for operators, RBAC, enrollment keys, policies, and artifacts.
-4. Enroll a disposable test node and verify `overlay nodes sync` populates `node list`.
+4. Enroll a disposable test node and verify `node list` shows it.
 5. Add audited SSH command execution.

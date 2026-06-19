@@ -65,7 +65,7 @@ func main() {
 	mux.HandleFunc("/v1/version", versionHandler)
 	mux.HandleFunc("/v1/tenants", emptyListHandler("tenants"))
 	mux.HandleFunc("/v1/sites", emptyListHandler("sites"))
-	mux.HandleFunc("/v1/nodes", nodesHandler(db))
+	mux.HandleFunc("/v1/nodes", nodesHandler(db, hs))
 	mux.HandleFunc("/v1/jobs", emptyListHandler("jobs"))
 	mux.HandleFunc("/v1/alerts", emptyListHandler("alerts"))
 	mux.HandleFunc("/v1/audit-events", emptyListHandler("audit_events"))
@@ -269,7 +269,7 @@ func emptyListHandler(resource string) http.HandlerFunc {
 	}
 }
 
-func nodesHandler(db *sql.DB) http.HandlerFunc {
+func nodesHandler(db *sql.DB, hs *headscale.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -291,19 +291,36 @@ func nodesHandler(db *sql.DB) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
+		meta := map[string]any{
+			"resource": "nodes",
+			"source":   "postgres",
+		}
+
+		if hs.Configured() {
+			headscaleNodes, err := hs.ListNodes(ctx)
+			if err != nil {
+				writeError(w, http.StatusBadGateway, "headscale_node_list_failed", err.Error())
+				return
+			}
+			synced, err := store.SyncHeadscaleNodes(ctx, db, headscaleNodes)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "headscale_node_sync_failed", err.Error())
+				return
+			}
+			meta["synced"] = synced
+			meta["source"] = "headscale+postgres"
+		}
+
 		nodes, err := store.ListNodes(ctx, db)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "node_list_failed", err.Error())
 			return
 		}
+		meta["count"] = len(nodes)
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"data": nodes,
-			"meta": map[string]any{
-				"resource": "nodes",
-				"count":    len(nodes),
-				"source":   "postgres",
-			},
+			"meta": meta,
 		})
 	}
 }
