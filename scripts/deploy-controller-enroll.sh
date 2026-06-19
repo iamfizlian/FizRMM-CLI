@@ -19,7 +19,33 @@ compose_file="deploy/generated/compose.yml"
 headscale_user="${DEPLOY_HEADSCALE_USER:-lab}"
 hostname="${RMM_CONTROLLER_HOSTNAME:-fizrmm-controller}"
 
+wait_for_apt_locks() {
+  if ! command -v fuser >/dev/null 2>&1; then
+    return
+  fi
+
+  locks=(
+    /var/lib/apt/lists/lock
+    /var/lib/dpkg/lock
+    /var/lib/dpkg/lock-frontend
+    /var/cache/apt/archives/lock
+  )
+
+  for _ in $(seq 1 120); do
+    if ! sudo fuser "${locks[@]}" >/dev/null 2>&1; then
+      return
+    fi
+    echo "Waiting for apt/dpkg lock to clear..."
+    sleep 5
+  done
+
+  echo "Timed out waiting for apt/dpkg lock to clear." >&2
+  sudo fuser -v "${locks[@]}" || true
+  exit 1
+}
+
 if ! command -v tailscale >/dev/null 2>&1; then
+  wait_for_apt_locks
   curl -fsSL https://tailscale.com/install.sh | sh
 fi
 
