@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -21,8 +22,11 @@ type command struct {
 
 var commands = []command{
 	{Name: "tenant list", Description: "List tenants"},
+	{Name: "tui", Description: "Open terminal operator UI"},
 	{Name: "site list", Description: "List sites"},
 	{Name: "node list", Description: "List managed nodes"},
+	{Name: "node check", Description: "Run a built-in node diagnostic"},
+	{Name: "check list", Description: "List built-in diagnostics"},
 	{Name: "node enroll-script", Description: "Generate an endpoint enrollment script"},
 	{Name: "node ssh", Description: "Open an audited SSH session"},
 	{Name: "exec", Description: "Run an audited command over SSH"},
@@ -56,6 +60,18 @@ func main() {
 	case commandName == "node list":
 		if err := listNodes(*apiURL, *jsonOutput); err != nil {
 			fmt.Fprintf(os.Stderr, "node list failed: %v\n", err)
+			os.Exit(1)
+		}
+	case commandName == "check list":
+		listChecks(*jsonOutput)
+	case len(args) >= 2 && args[0] == "node" && args[1] == "check":
+		if err := runCheck(*apiURL, args[2:], *jsonOutput); err != nil {
+			fmt.Fprintf(os.Stderr, "node check failed: %v\n", err)
+			os.Exit(1)
+		}
+	case commandName == "tui":
+		if err := runTUI(*apiURL); err != nil {
+			fmt.Fprintf(os.Stderr, "tui failed: %v\n", err)
 			os.Exit(1)
 		}
 	case len(args) >= 2 && args[0] == "node" && args[1] == "enroll-script":
@@ -211,42 +227,103 @@ type node struct {
 	CreatedAt       time.Time       `json:"created_at"`
 }
 
+type builtInCheck struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Command     string `json:"command"`
+}
+
+var builtInChecks = []builtInCheck{
+	{
+		Name:        "summary",
+		Description: "Hostname, OS, kernel, uptime, load, memory, and disk summary",
+		Command:     `printf 'Hostname: '; hostname; printf 'OS: '; . /etc/os-release 2>/dev/null && echo "$PRETTY_NAME" || uname -s; printf 'Kernel: '; uname -r; printf 'Uptime: '; uptime -p 2>/dev/null || uptime; printf '\nLoad:\n'; cat /proc/loadavg; printf '\nMemory:\n'; free -h; printf '\nDisk:\n'; df -hT -x tmpfs -x devtmpfs`,
+	},
+	{
+		Name:        "disk",
+		Description: "Filesystem usage excluding tmpfs/devtmpfs",
+		Command:     `df -hT -x tmpfs -x devtmpfs`,
+	},
+	{
+		Name:        "memory",
+		Description: "Memory and swap usage",
+		Command:     `free -h && printf '\nTop memory processes:\n' && ps -eo pid,comm,%mem,%cpu --sort=-%mem | head -n 11`,
+	},
+	{
+		Name:        "load",
+		Description: "Load average and top CPU processes",
+		Command:     `uptime; printf '\nTop CPU processes:\n'; ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 11`,
+	},
+	{
+		Name:        "services",
+		Description: "Failed systemd services",
+		Command:     `systemctl --failed --no-pager || true`,
+	},
+	{
+		Name:        "updates",
+		Description: "Pending OS package updates where supported",
+		Command:     `if command -v apt-get >/dev/null 2>&1; then apt list --upgradable 2>/dev/null | sed -n '1,40p'; elif command -v dnf >/dev/null 2>&1; then dnf check-update || true; elif command -v yum >/dev/null 2>&1; then yum check-update || true; elif command -v apk >/dev/null 2>&1; then apk version -l '<'; else echo 'No supported package manager found'; fi`,
+	},
+	{
+		Name:        "ports",
+		Description: "Listening TCP/UDP ports",
+		Command:     `ss -tulpen 2>/dev/null || netstat -tulpen 2>/dev/null || echo 'ss/netstat not found'`,
+	},
+	{
+		Name:        "tailscale",
+		Description: "Tailscale status and assigned IPs",
+		Command:     `tailscale ip; printf '\n'; tailscale status`,
+	},
+}
+
 func listNodes(apiURL string, jsonOutput bool) error {
-	url := strings.TrimRight(apiURL, "/") + "/v1/nodes"
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	resp, err := client.Get(url)
+	nodes, body, err := fetchNodes(apiURL)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("api returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
-	}
-
 	if jsonOutput {
 		fmt.Fprintln(os.Stdout, string(body))
 		return nil
 	}
 
-	var decoded nodeListResponse
-	if err := json.Unmarshal(body, &decoded); err != nil {
-		return err
+	printNodes(nodes)
+	return nil
+}
+
+func fetchNodes(apiURL string) ([]node, []byte, error) {
+	url := strings.TrimRight(apiURL, "/") + "/v1/nodes"
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	if len(decoded.Data) == 0 {
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, body, fmt.Errorf("api returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+
+	var decoded nodeListResponse
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return nil, body, err
+	}
+	return decoded.Data, body, nil
+}
+
+func printNodes(nodes []node) {
+	if len(nodes) == 0 {
 		fmt.Fprintln(os.Stdout, "No nodes found.")
-		return nil
+		return
 	}
 
 	fmt.Fprintf(os.Stdout, "%-6s %-24s %-12s %-16s %-20s\n", "ID", "HOSTNAME", "STATUS", "TENANT", "TAILNET IP")
-	for _, node := range decoded.Data {
+	for _, node := range nodes {
 		fmt.Fprintf(os.Stdout, "%-6d %-24s %-12s %-16d %-20s\n",
 			node.ID,
 			node.Hostname,
@@ -255,8 +332,6 @@ func listNodes(apiURL string, jsonOutput bool) error {
 			stringOrDash(node.TailnetIP),
 		)
 	}
-
-	return nil
 }
 
 func overlayNodes(apiURL string, sync bool, jsonOutput bool) error {
@@ -416,11 +491,51 @@ func runCommand(apiURL string, args []string, jsonOutput bool) error {
 	if command == "" {
 		return fmt.Errorf("command is required")
 	}
+	return runRemoteCommand(apiURL, *node, command, *timeout, jsonOutput)
+}
 
+func listChecks(jsonOutput bool) {
+	if jsonOutput {
+		_ = json.NewEncoder(os.Stdout).Encode(map[string]any{
+			"data": builtInChecks,
+		})
+		return
+	}
+	fmt.Fprintf(os.Stdout, "%-14s %s\n", "CHECK", "DESCRIPTION")
+	for _, check := range builtInChecks {
+		fmt.Fprintf(os.Stdout, "%-14s %s\n", check.Name, check.Description)
+	}
+}
+
+func runCheck(apiURL string, args []string, jsonOutput bool) error {
+	flags := flag.NewFlagSet("node check", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	node := flags.String("node", "", "node id or hostname")
+	timeout := flags.String("timeout", "45s", "check timeout")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *node == "" {
+		return fmt.Errorf("--node is required")
+	}
+	if flags.NArg() != 1 {
+		return fmt.Errorf("check name is required")
+	}
+	check, ok := findCheck(flags.Arg(0))
+	if !ok {
+		return fmt.Errorf("unknown check %q", flags.Arg(0))
+	}
+	if !jsonOutput {
+		fmt.Fprintf(os.Stdout, "== %s on %s ==\n", check.Name, *node)
+	}
+	return runRemoteCommand(apiURL, *node, check.Command, *timeout, jsonOutput)
+}
+
+func runRemoteCommand(apiURL string, node string, command string, timeout string, jsonOutput bool) error {
 	body, err := apiRequest(apiURL, http.MethodPost, "/v1/commands/run", map[string]any{
-		"node":    *node,
+		"node":    node,
 		"command": command,
-		"timeout": *timeout,
+		"timeout": timeout,
 	})
 	if err != nil {
 		return err
@@ -450,6 +565,172 @@ func runCommand(apiURL string, args []string, jsonOutput bool) error {
 		return fmt.Errorf("remote command exited %d", decoded.Data.ExitCode)
 	}
 	return nil
+}
+
+func findCheck(name string) (builtInCheck, bool) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for _, check := range builtInChecks {
+		if check.Name == name {
+			return check, true
+		}
+	}
+	return builtInCheck{}, false
+}
+
+func runTUI(apiURL string) error {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		clearScreen()
+		fmt.Fprintln(os.Stdout, "FizRMM")
+		fmt.Fprintln(os.Stdout, strings.Repeat("=", 72))
+		nodes, _, err := fetchNodes(apiURL)
+		if err != nil {
+			fmt.Fprintf(os.Stdout, "Node refresh failed: %v\n\n", err)
+		} else {
+			printNodes(nodes)
+		}
+		fmt.Fprintln(os.Stdout)
+		fmt.Fprintln(os.Stdout, "Actions:")
+		fmt.Fprintln(os.Stdout, "  1. Run built-in check")
+		fmt.Fprintln(os.Stdout, "  2. Run custom command")
+		fmt.Fprintln(os.Stdout, "  3. Refresh")
+		fmt.Fprintln(os.Stdout, "  q. Quit")
+		fmt.Fprint(os.Stdout, "\nSelect: ")
+
+		choice, err := readLine(reader)
+		if err != nil {
+			return err
+		}
+		switch strings.ToLower(choice) {
+		case "1":
+			if err := tuiRunCheck(apiURL, reader, nodes); err != nil {
+				return err
+			}
+		case "2":
+			if err := tuiRunCustomCommand(apiURL, reader, nodes); err != nil {
+				return err
+			}
+		case "3", "":
+			continue
+		case "q", "quit", "exit":
+			return nil
+		default:
+			pause(reader, "Unknown action.")
+		}
+	}
+}
+
+func tuiRunCheck(apiURL string, reader *bufio.Reader, nodes []node) error {
+	selected, ok, err := promptNode(reader, nodes)
+	if err != nil || !ok {
+		return err
+	}
+	clearScreen()
+	fmt.Fprintf(os.Stdout, "Checks for %s\n", selected.Hostname)
+	fmt.Fprintln(os.Stdout, strings.Repeat("=", 72))
+	for i, check := range builtInChecks {
+		fmt.Fprintf(os.Stdout, "%2d. %-12s %s\n", i+1, check.Name, check.Description)
+	}
+	fmt.Fprint(os.Stdout, "\nCheck: ")
+	choice, err := readLine(reader)
+	if err != nil {
+		return err
+	}
+	index, ok := parseSelection(choice, len(builtInChecks))
+	if !ok {
+		pause(reader, "Invalid check.")
+		return nil
+	}
+	check := builtInChecks[index]
+	clearScreen()
+	fmt.Fprintf(os.Stdout, "Running %s on %s\n%s\n", check.Name, selected.Hostname, strings.Repeat("=", 72))
+	err = runRemoteCommand(apiURL, selected.Hostname, check.Command, "45s", false)
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "\nError: %v\n", err)
+	}
+	pause(reader, "")
+	return nil
+}
+
+func tuiRunCustomCommand(apiURL string, reader *bufio.Reader, nodes []node) error {
+	selected, ok, err := promptNode(reader, nodes)
+	if err != nil || !ok {
+		return err
+	}
+	fmt.Fprintf(os.Stdout, "Command for %s: ", selected.Hostname)
+	command, err := readLine(reader)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(command) == "" {
+		return nil
+	}
+	clearScreen()
+	fmt.Fprintf(os.Stdout, "Running command on %s\n%s\n", selected.Hostname, strings.Repeat("=", 72))
+	err = runRemoteCommand(apiURL, selected.Hostname, command, "45s", false)
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "\nError: %v\n", err)
+	}
+	pause(reader, "")
+	return nil
+}
+
+func promptNode(reader *bufio.Reader, nodes []node) (node, bool, error) {
+	if len(nodes) == 0 {
+		pause(reader, "No nodes available.")
+		return node{}, false, nil
+	}
+	fmt.Fprintln(os.Stdout)
+	fmt.Fprint(os.Stdout, "Node number/id/hostname: ")
+	choice, err := readLine(reader)
+	if err != nil {
+		return node{}, false, err
+	}
+	choice = strings.TrimSpace(choice)
+	if choice == "" {
+		return node{}, false, nil
+	}
+	if index, ok := parseSelection(choice, len(nodes)); ok {
+		return nodes[index], true, nil
+	}
+	for _, node := range nodes {
+		if fmt.Sprint(node.ID) == choice || strings.EqualFold(node.Hostname, choice) {
+			return node, true, nil
+		}
+	}
+	pause(reader, "Node not found.")
+	return node{}, false, nil
+}
+
+func parseSelection(value string, max int) (int, bool) {
+	var selected int
+	if _, err := fmt.Sscanf(strings.TrimSpace(value), "%d", &selected); err != nil {
+		return 0, false
+	}
+	if selected < 1 || selected > max {
+		return 0, false
+	}
+	return selected - 1, true
+}
+
+func readLine(reader *bufio.Reader) (string, error) {
+	value, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	return strings.TrimSpace(value), nil
+}
+
+func pause(reader *bufio.Reader, message string) {
+	if message != "" {
+		fmt.Fprintln(os.Stdout, message)
+	}
+	fmt.Fprint(os.Stdout, "\nPress Enter to continue...")
+	_, _ = reader.ReadString('\n')
+}
+
+func clearScreen() {
+	fmt.Fprint(os.Stdout, "\033[H\033[2J")
 }
 
 func requestPreAuthKey(apiURL string, user string, ttl string, tags []string, reusable bool, ephemeral bool) (preAuthKey, error) {

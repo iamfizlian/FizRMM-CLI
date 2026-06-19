@@ -127,3 +127,21 @@ podman run --rm --network host \
   -w /src docker.io/library/golang:1.22 \
   go run ./cmd/rmmctl --api-url "https://${RMM_DOMAIN}" exec --node fiz-ubu-acdx -- hostname
 ```
+
+Run a built-in diagnostic:
+
+```bash
+podman run --rm --network host \
+  -v "$PWD:/src:Z" \
+  -w /src docker.io/library/golang:1.22 \
+  go run ./cmd/rmmctl --api-url "https://${RMM_DOMAIN}" node check --node fiz-ubu-acdx summary
+```
+
+Open the terminal operator UI:
+
+```bash
+podman run --rm -it --network host \
+  -v "$PWD:/src:Z" \
+  -w /src docker.io/library/golang:1.22 \
+  go run ./cmd/rmmctl --api-url "https://${RMM_DOMAIN}" tui
+```

@@ -10,15 +10,14 @@ Enroll node -> see node -> SSH to node -> run job -> collect inventory -> show m
 
 ## Current Status
 
-Scaffold only. The first useful target is a local lab with:
+The current prototype can:
 
-- `rmmctl --help`
-- `rmm-api --version`
-- PostgreSQL
-- Headscale
-- Prometheus
-- Alertmanager
-- Loki
+- deploy RMM API, PostgreSQL, Caddy, and Headscale
+- enroll Linux endpoints into Headscale
+- list enrolled nodes
+- run audited SSH commands over the tailnet
+- run built-in Linux diagnostics
+- open a basic terminal operator UI
 
 Go is required to build the binaries. Rootless Podman with Compose support is the preferred lab runtime.
 
@@ -82,6 +81,20 @@ Remote commands use the audited `exec` command once the RMM server can route to 
 go run ./cmd/rmmctl --api-url https://rmm.example.com exec --node node-hostname -- hostname
 ```
 
+Built-in checks avoid hand-writing shell for common diagnostics:
+
+```bash
+go run ./cmd/rmmctl --api-url https://rmm.example.com check list
+go run ./cmd/rmmctl --api-url https://rmm.example.com node check --node node-hostname summary
+go run ./cmd/rmmctl --api-url https://rmm.example.com node check --node node-hostname updates
+```
+
+Interactive terminal UI:
+
+```bash
+go run ./cmd/rmmctl --api-url https://rmm.example.com tui
+```
+
 Start the lab:
 
 ```bash
@@ -100,6 +113,6 @@ podman compose config
 
 1. Run `gofmt`, `go mod tidy`, and `go test ./...` on a machine with Go installed.
 2. Validate the lab with `podman compose config` and `podman compose up -d`.
-3. Expand migrations for operators, RBAC, enrollment keys, policies, and artifacts.
-4. Enroll a disposable test node and verify `node list` shows it.
-5. Add audited SSH command execution.
+3. Expand migrations for operators, RBAC, policies, and artifacts.
+4. Add durable job history and artifact storage.
+5. Add scheduled checks and alerting from collected results.
