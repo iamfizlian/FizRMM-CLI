@@ -27,6 +27,7 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 sudo tailscale up \
+  --reset \
   --login-server "${LOGIN_SERVER}" \
   --authkey "${AUTH_KEY}" \
   --hostname "${HOSTNAME}" \
