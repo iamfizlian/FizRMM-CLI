@@ -66,7 +66,12 @@ done
 
 "${compose_cmd}" -f "${compose_file}" exec headscale headscale users list >/tmp/fizrmm-headscale-users.txt
 if ! grep -Eq "(^|[[:space:]])${headscale_user}($|[[:space:]])" /tmp/fizrmm-headscale-users.txt; then
-  "${compose_cmd}" -f "${compose_file}" exec headscale headscale users create "${headscale_user}"
+  if ! "${compose_cmd}" -f "${compose_file}" exec headscale headscale users create "${headscale_user}" 2>/tmp/fizrmm-headscale-user-create.err; then
+    if ! grep -qi "already exists" /tmp/fizrmm-headscale-user-create.err; then
+      cat /tmp/fizrmm-headscale-user-create.err >&2
+      exit 1
+    fi
+  fi
 fi
 
 key="$("${compose_cmd}" -f "${compose_file}" exec headscale headscale preauthkeys create \
