@@ -57,6 +57,7 @@ deploy-config:
 
 deploy-up:
 	./scripts/deploy-render.sh
+	$(COMPOSE) -f deploy/generated/compose.yml build rmm-api
 	$(COMPOSE) -f deploy/generated/compose.yml up -d
 
 deploy-down:
@@ -73,6 +74,7 @@ deploy-bootstrap-token:
 
 deploy-restart-api:
 	./scripts/deploy-render.sh
+	$(COMPOSE) -f deploy/generated/compose.yml build rmm-api
 	$(COMPOSE) -f deploy/generated/compose.yml up -d --force-recreate rmm-api
 
 deploy-bootstrap-command:

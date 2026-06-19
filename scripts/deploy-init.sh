@@ -19,6 +19,7 @@ if [[ -z "${RMM_BOOTSTRAP_TOKEN:-}" ]]; then
 fi
 
 ./scripts/deploy-render.sh
+"${compose_cmd}" -f "${compose_file}" build rmm-api
 "${compose_cmd}" -f "${compose_file}" up -d
 
 echo "Waiting for Headscale to accept commands..."
@@ -47,6 +48,7 @@ fi
 
 ./scripts/deploy-headscale-key.sh
 ./scripts/deploy-render.sh
+"${compose_cmd}" -f "${compose_file}" build rmm-api
 "${compose_cmd}" -f "${compose_file}" up -d --force-recreate rmm-api
 
 echo
