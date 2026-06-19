@@ -55,7 +55,7 @@ services:
       RMM_API_ADDR: "__RMM_API_ADDR__"
       RMM_AUTO_MIGRATE: "__RMM_AUTO_MIGRATE__"
       RMM_BOOTSTRAP_TOKEN: "__RMM_BOOTSTRAP_TOKEN__"
-      RMM_DATABASE_URL: "postgres://fizrmm:__POSTGRES_PASSWORD__@postgres:5432/fizrmm?sslmode=disable"
+      RMM_DATABASE_URL: "postgres://fizrmm:__POSTGRES_PASSWORD_URLENCODED__@postgres:5432/fizrmm?sslmode=disable"
       RMM_HEADSCALE_API_KEY: "__RMM_HEADSCALE_API_KEY__"
       RMM_HEADSCALE_URL: "http://headscale:8080"
       RMM_MIGRATIONS_DIR: "__RMM_MIGRATIONS_DIR__"
