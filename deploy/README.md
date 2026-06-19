@@ -86,6 +86,8 @@ Edit `.env`:
 - `POSTGRES_PASSWORD`
 - `RMM_PUBLIC_BASE_URL`
 
+For now, use a long random PostgreSQL password made from letters, numbers, dashes, and underscores. `RMM_DATABASE_URL` embeds this value in a URL, so URL-reserved characters such as `@`, `/`, `:`, `?`, `#`, and `%` need percent-encoding and are easy to get wrong.
+
 Generate a bootstrap token:
 
 ```bash

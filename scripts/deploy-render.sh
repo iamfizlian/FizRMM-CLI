@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ ! -f .env ]]; then
-  echo ".env is missing. Run: cp deploy/.env.example .env, then edit it." >&2
-  exit 1
-fi
-
-set -a
-source .env
-set +a
+source ./scripts/env-file.sh
+load_env_file .env
 
 required=(
   RMM_DOMAIN

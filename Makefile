@@ -64,7 +64,7 @@ deploy-headscale-key:
 	./scripts/deploy-headscale-key.sh
 
 deploy-bootstrap-token:
-	./scripts/lab-bootstrap-token.sh
+	./scripts/deploy-bootstrap-token.sh
 
 deploy-restart-api:
 	./scripts/deploy-render.sh
